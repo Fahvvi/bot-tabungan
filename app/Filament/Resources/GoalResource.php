@@ -3,44 +3,34 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\GoalResource\Pages;
-use App\Filament\Resources\GoalResource\RelationManagers;
 use App\Models\Goal;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Tables\Columns\TextColumn;
 
 class GoalResource extends Resource
 {
     protected static ?string $model = Goal::class;
-
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-trophy';
+    protected static ?string $navigationGroup = 'Keuangan';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('owner_id')
+                Forms\Components\Select::make('owner_id')
+                    ->relationship('owner', 'name')
                     ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('name')
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('target_amount')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('current_amount')
-                    ->required()
-                    ->numeric()
-                    ->default(0.00),
-                Forms\Components\DatePicker::make('deadline'),
-                Forms\Components\TextInput::make('status')
-                    ->required()
-                    ->maxLength(255)
-                    ->default('active'),
+                    ->label('Pemilik'),
+                Forms\Components\TextInput::make('name')->required()->label('Nama Goal'),
+                Forms\Components\TextInput::make('target_amount')->numeric()->prefix('Rp')->required(),
+                Forms\Components\TextInput::make('code')
+                    ->label('Kode Invite')
+                    ->disabled() // Kode otomatis, jangan diedit manual
+                    ->dehydrated(false),
             ]);
     }
 
@@ -48,49 +38,38 @@ class GoalResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('owner_id')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('name')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('target_amount')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('current_amount')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('deadline')
-                    ->date()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('status')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
-                //
+                TextColumn::make('name')->weight('bold')->searchable(),
+                
+                // Kode Invite (Bisa dicopy)
+                TextColumn::make('code')
+                    ->label('Kode Invite')
+                    ->badge()
+                    ->color('info')
+                    ->copyable()
+                    ->copyMessage('Kode disalin!'),
+
+                TextColumn::make('current_amount')->money('IDR')->label('Terkumpul'),
+                TextColumn::make('target_amount')->money('IDR')->label('Target'),
+                
+                // Progress Bar (Persentase)
+                TextColumn::make('progress')
+                    ->label('%')
+                    ->state(function (Goal $record) {
+                        return $record->target_amount > 0 
+                            ? round(($record->current_amount / $record->target_amount) * 100) . '%' 
+                            : '0%';
+                    })
+                    ->badge()
+                    ->color(fn ($state) => intval($state) >= 100 ? 'success' : 'warning'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
             ]);
     }
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
     public static function getPages(): array

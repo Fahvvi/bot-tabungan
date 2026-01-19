@@ -3,40 +3,66 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\WalletResource\Pages;
-use App\Filament\Resources\WalletResource\RelationManagers;
 use App\Models\Wallet;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\IconColumn;
+use Illuminate\Validation\Rules\Unique; // Penting untuk validasi custom
 
 class WalletResource extends Resource
 {
     protected static ?string $model = Wallet::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-wallet';
+    protected static ?string $navigationGroup = 'Keuangan';
+    protected static ?string $navigationLabel = 'Dompet';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('user_id')
+                Forms\Components\Select::make('user_id')
+                    ->relationship('user', 'name')
                     ->required()
-                    ->numeric(),
+                    ->label('Pemilik Dompet')
+                    ->searchable()
+                    ->live(), // Agar validasi nama merespon jika user diganti
+                
                 Forms\Components\TextInput::make('name')
                     ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('type')
-                    ->required()
                     ->maxLength(255)
-                    ->default('bank'),
+                    ->label('Nama Dompet')
+                    ->placeholder('Contoh: BCA, Dompet Saku, Gopay')
+                    // Validasi Unik per User
+                    ->unique(
+                        ignoreRecord: true, 
+                        modifyRuleUsing: function (Unique $rule, callable $get) {
+                            // Cek unik hanya untuk user_id yang sedang dipilih
+                            return $rule->where('user_id', $get('user_id'));
+                        }
+                    )
+                    ->validationMessages([
+                        'unique' => 'Nama dompet ini sudah dipakai oleh user tersebut. Coba nama lain (misal: BCA-2).',
+                    ]),
+
+                Forms\Components\Select::make('type')
+                    ->options([
+                        'cash' => 'Tunai (Cash)',
+                        'bank' => 'Bank / E-Wallet',
+                    ])
+                    ->required()
+                    ->label('Tipe'),
+
                 Forms\Components\TextInput::make('balance')
                     ->required()
                     ->numeric()
-                    ->default(0.00),
+                    ->prefix('Rp')
+                    ->default(0)
+                    ->label('Saldo Awal'),
             ]);
     }
 
@@ -44,30 +70,55 @@ class WalletResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('user_id')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('name')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('type')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('balance')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
+                TextColumn::make('user.name')
+                    ->label('Pemilik')
                     ->sortable()
+                    ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
+
+                TextColumn::make('name')
+                    ->label('Nama Dompet')
+                    ->searchable()
+                    ->weight('bold')
+                    ->sortable(),
+
+                TextColumn::make('type')
+                    ->badge()
+                    ->colors([
+                        'success' => 'cash',
+                        'primary' => 'bank',
+                    ])
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'cash' => 'Tunai',
+                        'bank' => 'Bank',
+                        default => $state,
+                    })
+                    ->label('Tipe'),
+
+                TextColumn::make('balance')
+                    ->money('IDR', locale: 'id')
+                    ->label('Saldo')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->alignment('end'),
+
+                TextColumn::make('updated_at')
+                    ->dateTime('d M Y H:i')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->label('Terakhir Update'),
             ])
+            ->defaultSort('created_at', 'desc')
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('type')
+                    ->options([
+                        'cash' => 'Tunai',
+                        'bank' => 'Bank',
+                    ])
+                    ->label('Filter Tipe'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
