@@ -18,6 +18,12 @@ class UserResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-users';
     protected static ?string $navigationGroup = 'Settings';
 
+    // 👇 TAMBAHKAN INI: Mematikan Fitur Create (Tombol "New User" Hilang)
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -42,7 +48,7 @@ class UserResource extends Resource
             ->columns([
                 TextColumn::make('name')->searchable(),
                 
-                // Status Verifikasi (Icon Centang/Silang)
+                // Status Verifikasi
                 IconColumn::make('is_verified')
                     ->label('Verified')
                     ->boolean()
@@ -62,14 +68,16 @@ class UserResource extends Resource
                 TextColumn::make('created_at')->dateTime()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                // Filter User Verified / Belum
                 Tables\Filters\Filter::make('is_verified')
                     ->query(fn ($query) => $query->where('is_verified', true))
                     ->label('Hanya User Verified'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-            ]);
+                // Tombol Delete Opsional (Jika ingin proteksi penuh, hapus baris di bawah ini)
+                // Tables\Actions\DeleteAction::make(), 
+            ])
+            ->bulkActions([]); // Kosongkan bulk actions agar tidak bisa delete massal
     }
 
     public static function getRelations(): array
@@ -81,7 +89,7 @@ class UserResource extends Resource
     {
         return [
             'index' => Pages\ListUsers::route('/'),
-            'create' => Pages\CreateUser::route('/create'),
+            // 'create' => Pages\CreateUser::route('/create'), // Hapus atau Komen baris ini
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
     }
