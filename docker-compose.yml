@@ -1,0 +1,11 @@
+# ... bagian atas ...
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: finplan-tunnel
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=eyJhIjoiODY0NmRlMzAwNmQzZTRjYjJlOGVkNDhkNDM4NWVkMTYiLCJ0IjoiZDMxNDkxZGItZGFjZS00Y2U2LTgzMWUtM2I5YTExYjNkMDIyIiwicyI6Ik5EVmxOVEZtTURNdFpqbGpNaTAwWldJMkxXRXlORFl0WmpFM1l6UTNNamM1TW1NNCJ9
+    networks:
+      - finplan-net
+

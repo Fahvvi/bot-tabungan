@@ -302,18 +302,38 @@ $bot->onCommand('rekap', function (Nutgram $bot) {
             ->orderBy('transaction_date', 'asc')
             ->get();
 
-        $incomeTotal = Transaction::where('user_id', $user->id)->where('type', 'income')->whereBetween('transaction_date', [$start, $end])->sum('amount');
-        $savingsTotal = Transaction::where('user_id', $user->id)->where('type', 'transfer_to_goal')->whereBetween('transaction_date', [$start, $end])->sum('amount');
+        // Hitung Total Raw
+        $rawIncome = Transaction::where('user_id', $user->id)->where('type', 'income')->whereBetween('transaction_date', [$start, $end])->sum('amount');
+        $savingsIn = Transaction::where('user_id', $user->id)->where('type', 'transfer_to_goal')->whereBetween('transaction_date', [$start, $end])->sum('amount');
+        
+        // Hitung Penarikan (Cairkan Goal) agar tidak dobel catat di Pemasukan
+        $withdrawals = Transaction::where('user_id', $user->id)
+            ->where('type', 'income')
+            ->where('description', 'LIKE', 'Cairkan Goal:%')
+            ->whereBetween('transaction_date', [$start, $end])
+            ->sum('amount');
+
         $expenseTotal = $expenses->sum('amount');
 
-        if ($expenseTotal == 0 && $incomeTotal == 0 && $savingsTotal == 0) return $bot->sendMessage("📭 Data kosong.", $bot->chatId());
+        // Hitung Nilai Bersih untuk Laporan
+        $realIncome = $rawIncome - $withdrawals; // Pemasukan murni
+        $netSavings = $savingsIn - $withdrawals; // Tabungan bersih (Nabung - Cairkan)
 
-        $cashflow = $incomeTotal - $expenseTotal - $savingsTotal;
+        if ($expenseTotal == 0 && $rawIncome == 0 && $savingsIn == 0) return $bot->sendMessage("📭 Data kosong.", $bot->chatId());
+
+        // Cashflow Real di Dompet = (Income + Withdrawals) - Expense - SavingsIn
+        $cashflow = $rawIncome - $expenseTotal - $savingsIn;
 
         $msg = "📊 *{$title}*\n";
-        $msg .= "💰 Pemasukan: Rp " . number_format($incomeTotal) . "\n";
+        $msg .= "💰 Pemasukan: Rp " . number_format($realIncome) . "\n";
         $msg .= "💸 Pengeluaran: Rp " . number_format($expenseTotal) . "\n";
-        $msg .= "🐖 Tabungan: Rp " . number_format($savingsTotal) . "\n";
+        
+        if ($netSavings < 0) {
+            $msg .= "🐖 Ambil Tabungan: Rp " . number_format(abs($netSavings)) . "\n";
+        } else {
+            $msg .= "🐖 Tabungan (Net): Rp " . number_format($netSavings) . "\n";
+        }
+        
         $msg .= "------------------\n";
         foreach ($expenses as $i => $tx) {
             $date = Carbon::parse($tx->transaction_date)->format('d M');
@@ -509,14 +529,19 @@ $bot->onText('^/hapusgoal\s+(.+)', function (Nutgram $bot, $rawString) {
     processGoalWithdraw($bot, $rawString, true);
 });
 
+// HELPER LOGIC UNTUK CAIRKAN/HAPUS (FIXED & REFRESHED)
 function processGoalWithdraw($bot, $rawString, $isDelete = false) {
     try {
         $user = User::where('telegram_chat_id', $bot->chatId())->first();
         
+        // 1. Resolve Wallet & Goal
         list($targetWallet, $goalName) = resolveWallet($user, $rawString); 
         $goalName = trim($goalName);
 
         if (!$targetWallet) return $bot->sendMessage("❌ Kamu belum punya dompet utama.");
+
+        // 2. REFRESH SALDO AWAL (PENTING!)
+        $targetWallet->refresh(); 
 
         $goal = $user->goals()->where('name', 'LIKE', "%{$goalName}%")->first();
         if (!$goal) return $bot->sendMessage("❌ Goal **{$goalName}** tidak ditemukan.");
@@ -531,21 +556,43 @@ function processGoalWithdraw($bot, $rawString, $isDelete = false) {
 
         $amount = $goal->current_amount;
 
+        // 3. Eksekusi Database
         DB::transaction(function () use ($user, $goal, $targetWallet, $amount, $isDelete) {
+            // Tambah Saldo ke Wallet
             $targetWallet->increment('balance', $amount);
+            
+            // Catat Pemasukan
             Transaction::create([
-                'user_id' => $user->id, 'wallet_id' => $targetWallet->id, 'type' => 'income',
-                'amount' => $amount, 'description' => "Cairkan Goal: {$goal->name}", 'transaction_date' => now()
+                'user_id' => $user->id,
+                'wallet_id' => $targetWallet->id,
+                'type' => 'income',
+                'amount' => $amount,
+                'description' => "Cairkan Goal: {$goal->name}",
+                'transaction_date' => now()
             ]);
 
-            if ($isDelete) $goal->delete(); else $goal->update(['current_amount' => 0]);
+            // Hapus atau Reset Goal
+            if ($isDelete) {
+                $goal->delete(); 
+            } else {
+                $goal->update(['current_amount' => 0]); 
+            }
         });
 
+        // 4. REFRESH SALDO AKHIR (PENTING!)
+        // Ambil data terbaru langsung dari Database agar akurat 100%
+        $targetWallet->refresh();
+
         $action = $isDelete ? "Dihapus & Dicairkan" : "Dicairkan";
+        
         $bot->sendMessage(
-            "🔓 *Goal {$action}!*\n💰 Dana Cair: Rp " . number_format($amount) . "\n📥 Masuk ke: **{$targetWallet->name}**\n💳 Saldo Wallet Sekarang: Rp " . number_format($targetWallet->balance + $amount),
+            "🔓 *Goal {$action}!*\n" .
+            "💰 Dana Cair: Rp " . number_format($amount) . "\n" .
+            "📥 Masuk ke: **{$targetWallet->name}**\n" .
+            "💳 Saldo Wallet Sekarang: Rp " . number_format($targetWallet->balance), // Gunakan data real DB
             $bot->chatId(), null, 'Markdown'
         );
+
     } catch (\Throwable $e) { $bot->sendMessage("Error: " . $e->getMessage()); }
 }
 

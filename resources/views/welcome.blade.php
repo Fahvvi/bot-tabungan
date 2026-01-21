@@ -81,7 +81,11 @@
                 <div class="w-8 h-8 rounded bg-gray-700 flex items-center justify-center font-bold text-xs text-white">{{ substr($user->name, 0, 2) }}</div>
                 <div class="ml-3">
                     <p class="text-xs font-bold text-white">{{ $user->name }}</p>
-                    <div class="flex items-center mt-1"><div class="w-2 h-2 rounded-full bg-grass-green mr-1.5 animate-pulse"></div><p class="text-[10px] text-grass-green">ONLINE</p></div>
+                    <div class="flex items-center mt-1">
+                        <div class="w-2 h-2 rounded-full {{ $user->telegram_chat_id ? 'bg-blue-500' : 'bg-grass-green' }} mr-1.5 animate-pulse"></div>
+                        <p class="text-[10px] {{ $user->telegram_chat_id ? 'text-blue-400' : 'text-grass-green' }}">{{ $user->telegram_chat_id ? 'TELEGRAM ACTIVE' : 'ONLINE' }}</p>
+                    </div>
+                    @if($user->telegram_username) <p class="text-[10px] text-grass-muted">@ {{ $user->telegram_username }}</p> @endif
                 </div>
             </div>
         </div>
@@ -94,7 +98,13 @@
                 <div class="flex justify-between items-end mb-8">
                     <div>
                         <h1 class="text-2xl font-bold text-white mb-1">Dashboard</h1>
-                        <p class="text-grass-muted text-xs">Financial Node Status: Active</p>
+                        <p class="text-grass-muted text-xs flex items-center gap-2">
+                            Financial Node Status: Active
+                            @if($user->is_verified)
+                                <span class="text-grass-green bg-grass-green/10 px-1.5 rounded border border-grass-green/20">VERIFIED</span>
+                            @endif
+                            @if($user->telegram_chat_id) <span class="text-blue-400 bg-blue-900/20 px-1.5 rounded border border-blue-800/30">BOT LINKED</span> @endif
+                        </p>
                     </div>
                     <button @click="openModal = true" class="bg-grass-green text-black px-5 py-2.5 rounded font-bold hover:bg-white transition text-xs flex items-center shadow-[0_0_15px_rgba(0,229,153,0.4)]">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
